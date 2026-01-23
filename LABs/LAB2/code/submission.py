@@ -9,20 +9,22 @@ def data_preprocess(example: np.ndarray) -> np.ndarray:
     TODO: 完成数据预处理，需要返回处理后的example字典
     """
     img_np = np.array(example["image"], dtype=np.uint8)
+    img_np /= 255.0
 
     # TODO: 1. 将图像扩展维度 (28,28) -> (1,28,28)
-    img_np_with_channel = None
+    img_np_with_channel = img_np[np.newaxis, :, :]
     
     # TODO: 2. 将图像展平为一维数组 (28,28) -> (784,)
-    img_np_flat = None
+    img_np_flat = img_np.flatten()
     
     # TODO: 3. 将处理后的数据添加到example字典中
-    # example["image2D"] = ...
-    # example["image1D"] = ...
+    example["image2D"] = img_np_with_channel
+    example["image1D"] = img_np_flat
 
     # TODO: 4.（可选）进行相关数据预处理，例如：归一化、标准化等
 
-    raise NotImplementedError("请完成data_preprocess函数")
+    # raise NotImplementedError("请完成data_preprocess函数")
+
     return example
 
 class PCA:
@@ -56,7 +58,16 @@ class PCA:
         X : np.ndarray of shape (N, D)
             Input data.
         """
-        raise NotImplementedError("完成 PCA.fit 方法")
+        # raise NotImplementedError("完成 PCA.fit 方法")
+        self.mean_ = np.mean(X, axis=0)
+        N = X.shape[0]
+        X_centered = X - self.mean_
+        _, Sigma, VT = np.linalg.svd(X_centered, full_matrices=False)
+        self.components_ = VT[:self.n_components]
+        self.explained_variance_ = ((Sigma ** 2) / (N - 1))[:self.n_components]
+        variance = ((Sigma ** 2) / (N - 1)).sum()
+        self.explained_variance_ratio_ = self.explained_variance_ / variance
+
         return self
 
     def transform(self, X: np.ndarray) -> np.ndarray:
@@ -153,10 +164,30 @@ class GMM:
         # responsibilities
         K = self.n_components
         N = X.shape[0]
+        D = X.shape[1]
         log_prob = np.empty((N, K), dtype=X.dtype)
+        const = - D * 0.5 * np.log(2 * np.pi)
         
+        for k in range(K):
+            mean = self.means_[k]
+            covariance = self.covariances_[k]
+            sign, logdet = np.linalg.slogdet(covariance)
+            if sign != 1:
+                logdet = 0
+                cov_inverse = np.eye(D)
+            else:
+                cov_inverse = np.linalg.inv(covariance)
+            diff = X - mean
+            exponent = -0.5 * np.sum((diff @ cov_inverse) * diff, axis=1)
+            log_resp = const - 0.5 * logdet + exponent + np.log(self.weights_[k])
+            log_prob[:, k] = log_resp
 
-        raise NotImplementedError("完成 GMM._estep 方法")
+        max_log = np.max(log_prob, axis=1)
+        log_prob_norm = max_log + np.log(np.sum(np.exp(log_prob - max_log[:, np.newaxis]), axis=1))
+        resp = np.exp(log_prob - log_prob_norm[:, np.newaxis])
+        lower_bound = np.sum(log_prob_norm)
+        # raise NotImplementedError("完成 GMM._estep 方法")
+
         return resp, lower_bound
 
     def _mstep(self, X: np.ndarray, resp: np.ndarray) -> None:
@@ -173,8 +204,18 @@ class GMM:
         2. self.means_: 每个高斯分布的均值向量
         3. self.covariances_: 每个高斯分布的协方差矩阵
         """
+        N, D = X.shape
+        K = self.n_components
+        Nk = np.sum(resp, axis=0)
+        
+        self.weights_ = Nk / N
+        self.means_ = (resp.T @ X) / Nk[:, np.newaxis]
 
-        raise NotImplementedError("完成 GMM._mstep 方法")
+        for k in range(K):
+            diff = X - self.means_[k]
+            self.covariances_[k] = (diff.T * resp[:, k]) @ diff / Nk[k]
+            self.covariances_[k] += self.reg_covar * np.eye(D)
+        # raise NotImplementedError("完成 GMM._mstep 方法")
 
     def fit(self, X: np.ndarray) -> "GMM":
         rng = self._rng()
