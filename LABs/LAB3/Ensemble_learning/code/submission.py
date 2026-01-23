@@ -29,7 +29,15 @@ class VotingModel(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         # TODO: 实现 soft voting
-        pass
+        # pass
+        prob = []
+        for model in self.model_list:
+            prob.append(model.predict_proba(X))
+
+        avg_prob = np.mean(prob, axis=0)
+        prediction = np.argmax(avg_prob, axis=1)
+
+        return prediction
 
 
 
@@ -44,18 +52,39 @@ class BaggingModel(BaseEstimator, ClassifierMixin):
         3. 对每个模型 predict 并进行多数投票
     """
 
-    def __init__(self, n_estimators=10):
+    def __init__(self, n_estimators=10, max_depth=3):
         self.n_estimators = n_estimators
+        self.max_depth = max_depth
         self.models = []
 
     def fit(self, X, y):
         # TODO: 实现 bootstrap 采样并训练多个弱分类器
-        pass
+        # pass
+        for _ in range(self.n_estimators):
+            X_sample, y_sample = bootstrap_sample(X, y)
+            model = DecisionTreeClassifier(max_depth=self.max_depth)
+            model.fit(X_sample, y_sample)
+            self.models.append(model)
+
+        return self
 
     def predict(self, X):
         # TODO: 实现多数投票
 
-        pass
+        # pass
+        predictions = np.zeros((X.shape[0], self.n_estimators))
+        for i in range(self.n_estimators):
+            predictions[:, i] = self.models[i].predict(X)
+
+        prediction = []
+        for vote in predictions:
+            counter = np.sum(vote)
+            if 2 * counter >= self.n_estimators:
+                prediction.append(1)
+            else:
+                prediction.append(0)
+
+        return np.array(prediction)
 
 
 
@@ -93,25 +122,34 @@ class AdaBoostModel(BaseEstimator, ClassifierMixin):
         for t in range(self.n_estimators):
 
             # TODO: step 1 — 训练 stump
-
+            stump = DecisionTreeClassifier(max_depth=1)
+            stump.fit(X, y, sample_weight=w)
 
             # TODO: step 2 — 获取预测 pred & 映射 pred_signed
-
+            pred = stump.predict(X)
+            pred_signed = pred * 2 - 1
 
             # TODO: step 3 — 计算带权错误率 err
-
+            incorrect = (pred_signed != y_signed)
+            error = np.sum(w[incorrect]) / np.sum(w)
+            error = np.clip(error, 1e-10, 1 - 1e-10)
 
             # TODO: step 4 — 计算 alpha，应用学习率
-
+            alpha = self.learning_rate * 0.5 * np.log((1 - error) / error)
 
             # TODO: step 5 — 存储 stump 和 alpha
-
+            self.models.append(stump)
+            self.alphas.append(alpha)
 
             # TODO: step 6 — 更新样本权重
-
+            w *= np.exp(-alpha * y_signed * pred_signed)
+            w /= np.sum(w)
 
             # TODO: step 7 — 记录当前训练误差（使用自带 predict）
-            pass
+            # pass
+            current_preds = self.predict(X)
+            current_accuracy = np.mean(current_preds == y)
+            self.train_errors.append(1 - current_accuracy)
 
     def predict(self, X):
         """
@@ -119,7 +157,13 @@ class AdaBoostModel(BaseEstimator, ClassifierMixin):
         """
         # TODO:
 
-        pass
+        # pass
+        predictions = np.array([model.predict(X) for model in self.models]).T
+        predictions_signed = 2 * predictions - 1
+        scores = predictions_signed @ self.alphas
+        final_pred = (scores >= 0).astype(int)
+
+        return final_pred
 
 
 
@@ -183,10 +227,26 @@ class StackingModel(BaseEstimator, ClassifierMixin):
         # 对每个 base model 训练并获得 predict_proba(X)
         # 拼接成 Z = [p1, p2, ...]
         # 用 meta_model.fit(Z, y)
-        pass
+        # pass
+        meta_features = []
+        for _, model in self.base_models.items():
+            model.fit(X, y)
+            proba = model.predict_proba(X)[:, 1]
+            meta_features.append(proba)
+        
+        Z = np.column_stack(meta_features)
+        self.meta_model.fit(Z, y)
+
+        return self
 
     def predict(self, X):
         # TODO:
         # 同样拼接 Z_test
         # meta_model.predict(Z)
-        pass
+        # pass
+        meta_features = []
+        for _, model in self.base_models.items():
+            proba = model.predict_proba(X)[:, 1]
+            meta_features.append(proba)
+        Z = np.column_stack(meta_features)
+        return self.meta_model.predict(Z)

@@ -10,7 +10,7 @@ def get_arguments():
         "--method",
         type=str,
         default="linear",
-        choices=["linear", "rbf", "poly", "grid", "all"],
+        choices=["linear", "rbf", "poly", "grid", "kernel_custom", "all"],
         help="Choose SVM model to train"
     )
 
@@ -18,6 +18,11 @@ def get_arguments():
     parser.add_argument("--C", type=float, default=1.0)
     parser.add_argument("--gamma", type=str, default="scale")
     parser.add_argument("--degree", type=int, default=3)
+    parser.add_argument("--coef0", type=float, default=1.0)
+
+    parser.add_argument("--kernel", type=str, default="all", 
+                        choices=["rbf", "poly", "linear", 'all'], 
+                        help="Kernel type for custom SVM")
 
     # Grid Search
     parser.add_argument("--use_gridsearch", action="store_true",

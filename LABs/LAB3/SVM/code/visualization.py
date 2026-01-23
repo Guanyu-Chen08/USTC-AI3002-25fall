@@ -23,7 +23,7 @@ def save_fig(path):
 # 1. PCA + 决策边界可视化
 # ================================================================
 
-def plot_decision_boundary_2D(model, X, y, save_dir, method_name):
+def plot_decision_boundary_2D(model, X, y, save_dir, method_name, kernel):
     """
     将高维数据 PCA 到 2D，再可视化 SVM 决策边界。
     """
@@ -70,14 +70,14 @@ def plot_decision_boundary_2D(model, X, y, save_dir, method_name):
 
     plt.colorbar(scatter)
 
-    save_fig(os.path.join(save_dir, f"decision_boundary_{method_name}.png"))
+    save_fig(os.path.join(save_dir, f"decision_boundary_{method_name}_{kernel}.png"))
 
 
 # ================================================================
 # 2. ROC 曲线可视化
 # ================================================================
 
-def plot_roc_curve(model, X_test, y_test, save_dir, method_name):
+def plot_roc_curve(model, X_test, y_test, save_dir, method_name, kernel):
     print("[Visual] Plotting ROC curve...")
 
     try:
@@ -98,7 +98,7 @@ def plot_roc_curve(model, X_test, y_test, save_dir, method_name):
     plt.title(f"ROC Curve - {method_name.upper()}")
     plt.legend(loc="lower right")
 
-    save_fig(os.path.join(save_dir, f"roc_curve_{method_name}.png"))
+    save_fig(os.path.join(save_dir, f"roc_curve_{method_name}_{kernel}.png"))
 
 
 # ================================================================

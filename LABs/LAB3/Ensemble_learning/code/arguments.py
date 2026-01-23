@@ -9,6 +9,9 @@ def get_args():
 
     parser.add_argument('--n_estimators', type=int, default=50,
                         help='弱学习器数量')
+    
+    parser.add_argument('--max_depth', type=int, default=3,
+                        help='最大深度')
 
     parser.add_argument('--learning_rate', type=float, default=0.1,
                         help='AdaBoost 学习率')

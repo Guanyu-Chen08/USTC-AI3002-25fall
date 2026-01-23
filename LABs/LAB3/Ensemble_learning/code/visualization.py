@@ -6,7 +6,7 @@ import numpy as np
 # -------------------------------------------------------
 # 1. 模型性能对比（柱状图）
 # -------------------------------------------------------
-def plot_model_comparison(results, save_path=None):
+def plot_model_comparison(results, save_path=None, method=None):
     """
     results: dict, key=model_name, value=accuracy or f1
     """
@@ -14,7 +14,7 @@ def plot_model_comparison(results, save_path=None):
     sns.barplot(x=list(results.keys()), y=list(results.values()))
     plt.xticks(rotation=45)
     plt.ylabel("Score")
-    plt.title("Model Performance Comparison")
+    plt.title(f"Model Performance Comparison based on {method}")
     plt.tight_layout()
 
     if save_path:

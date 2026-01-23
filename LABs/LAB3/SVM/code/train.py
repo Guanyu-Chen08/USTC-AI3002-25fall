@@ -2,6 +2,10 @@
 import os
 import time
 import numpy as np
+
+import matplotlib
+matplotlib.use('Agg')
+
 import matplotlib.pyplot as plt
 
 from arguments import get_arguments
@@ -20,9 +24,9 @@ from submission import get_student_model as get_model
 # 工具函数：创建保存目录
 # ==============================================================
 
-def create_save_dir(base_dir, method):
+def create_save_dir(base_dir, method, kernel='None'):
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    save_dir = os.path.join(base_dir, f"{timestamp}_{method}")
+    save_dir = os.path.join(base_dir, f"{timestamp}_{method}_{kernel}")
     os.makedirs(save_dir, exist_ok=True)
     return save_dir
 
@@ -55,7 +59,7 @@ def train_and_evaluate(method, args):
         print(f"[{method}] AUC = None")
 
     # 保存目录
-    save_dir = create_save_dir(args.save_dir, method)
+    save_dir = create_save_dir(args.save_dir, method, args.kernel)
 
     # 保存评估结果
     with open(os.path.join(save_dir, "metrics.txt"), "w") as f:
@@ -67,14 +71,14 @@ def train_and_evaluate(method, args):
     # 可视化决策边界（2D PCA）
     print("Plotting 2D decision boundary...")
     try:
-        plot_decision_boundary_2D(model, X_train, y_train, save_dir, method)
+        plot_decision_boundary_2D(model, X_train, y_train, save_dir, method, args.kernel)
     except Exception as e:
         print(f"[Warning] Decision boundary plot failed: {e}")
 
     # ROC 曲线
     print("Plotting ROC curve...")
     try:
-        plot_roc_curve(model, X_test, y_test, save_dir, method)
+        plot_roc_curve(model, X_test, y_test, save_dir, method, args.kernel)
     except Exception as e:
         print(f"[Warning] ROC plot failed: {e}")
 
@@ -99,12 +103,22 @@ def train_and_evaluate(method, args):
 def main():
 
     args = get_arguments()
+    try:
+        args.gamma = float(args.gamma)
+    except ValueError:
+        pass
 
     if args.method == "all":
         methods = ["linear", "rbf", "poly", "kernel_custom", "grid"]
 
         for m in methods:
-            train_and_evaluate(m, args)
+            if m == 'kernel_custom' and args.kernel == 'all':
+                for kernel in ["rbf", "poly", "linear"]:
+                    args.kernel = kernel
+                    train_and_evaluate(m, args)
+                args.kernel = 'all'
+            else:
+                train_and_evaluate(m, args)
 
     else:
         train_and_evaluate(args.method, args)

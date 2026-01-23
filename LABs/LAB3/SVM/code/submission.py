@@ -1,6 +1,9 @@
 # submission.py (Student Version)
 
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
 from sklearn.base import BaseEstimator, ClassifierMixin
 from models import get_linear_svm, get_rbf_svm, get_poly_svm
@@ -22,7 +25,12 @@ def rbf_kernel(X1, X2, gamma):
         ||x - z||^2 = x^2 + z^2 - 2 x z^T
     """
     
-    raise NotImplementedError
+    # raise NotImplementedError
+    X1_sq = np.sum(X1 ** 2, axis=1).reshape(-1, 1)
+    X2_sq = np.sum(X2 ** 2, axis=1).reshape(1, -1)
+    dist_sq = X1_sq + X2_sq - 2 * np.dot(X1, X2.T)
+
+    return np.exp(-gamma * dist_sq)
 
 
 def poly_kernel(X1, X2, degree=3, coef0=1.0, gamma=1.0):
@@ -35,7 +43,9 @@ def poly_kernel(X1, X2, degree=3, coef0=1.0, gamma=1.0):
         2. 按公式实现 poly kernel
     """
     
-    raise NotImplementedError
+    # raise NotImplementedError
+
+    return (gamma * np.dot(X1, X2.T) + coef0) ** degree
 
 # ================================================================
 # 2. Kernel 管理器
@@ -109,7 +119,14 @@ class KernelSVM(BaseEstimator, ClassifierMixin):
             2. 调用 kernel_manager.compute(X, X) 计算核矩阵 K_train
             3. 使用 self.model.fit(K_train, y)
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        self.X_train = X
+        if self.gamma == 'scale':
+            self.kernel_manager.gamma = 1.0 / (X.shape[1] * X.var())
+        K_train = self.kernel_manager.compute(X, X)
+        self.model.fit(K_train, y)
+
+        return self
 
     def predict(self, X):
         """
@@ -117,7 +134,10 @@ class KernelSVM(BaseEstimator, ClassifierMixin):
             1. 计算 K_test = K(X_test, X_train)
             2. self.model.predict(K_test)
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+        K_test = self.kernel_manager.compute(X, self.X_train)
+
+        return self.model.predict(K_test)
 
     def predict_proba(self, X):
         """
@@ -125,7 +145,11 @@ class KernelSVM(BaseEstimator, ClassifierMixin):
             1. 同上，计算 K_test
             2. self.model.predict_proba(K_test)
         """
-        raise NotImplementedError
+        # raise NotImplementedError
+
+        K_test = self.kernel_manager.compute(X, self.X_train)
+
+        return self.model.predict_proba(K_test)
 
 
 # ================================================================
@@ -147,7 +171,31 @@ class GridSearchSVM:
     def fit(self, X, y):
         # TODO: 完成 param_grid
         # param_grid = {...}
-        raise NotImplementedError
+        # raise NotImplementedError
+        param_grid = {
+            'C': [0.1, 1, 10, 100],
+            'gamma': ['scale', 0.01, 0.1],
+            'kernel': ['linear', 'rbf', 'poly'],
+        }
+
+        grid = GridSearchCV(
+            SVC(probability=True), 
+            param_grid, 
+            cv=self.kfold, 
+            scoring={'accuracy': 'accuracy', 'f1': 'f1'},
+            refit='f1',
+            n_jobs=-1
+        )
+
+        print(f"Starting Grid Search with {self.kfold}-fold CV...")
+        grid.fit(X, y)
+        self.grid_search = grid
+        self.best_model = grid.best_estimator_
+        self.best_params = grid.best_params_
+        self.best_model.cv_results_ = grid.cv_results_
+        print(f"Best parameters found: {self.best_params}")
+        
+        return self
 
     def predict(self, X):
         return self.best_model.predict(X)
@@ -179,4 +227,27 @@ def get_student_model(method, args):
         补全上述逻辑
     """
 
-    raise NotImplementedError
+    # raise NotImplementedError
+    if method == "linear":
+        return get_linear_svm(args.C)
+        
+    elif method == "rbf":
+        return get_rbf_svm(args.C, args.gamma)
+        
+    elif method == "poly":
+        return get_poly_svm(args.C, args.degree, args.gamma)
+        
+    elif method == "kernel_custom":
+        return KernelSVM(
+            kernel=args.kernel, 
+            C=args.C, 
+            gamma=args.gamma, 
+            degree=args.degree, 
+            coef0=args.coef0
+        )
+        
+    elif method == "grid":
+        return GridSearchSVM(kfold=5)
+    
+    else:
+        raise ValueError(f"Unknown method: {method}")
