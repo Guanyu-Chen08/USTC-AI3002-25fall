@@ -77,12 +77,25 @@ def sarsa(env, num_episodes, discount_factor=1.0, alpha=0.5, epsilon=0.1, max_st
         # One step in the environment (with max_steps safety limit)
         for t in range(max_steps):
             #########################Implement your code here#########################
-            raise NotImplementedError("Not implemented")
+            # raise NotImplementedError("Not implemented")
             # step 1 : Take a step using current action
+            next_state, reward, done, _ = env.step(action)
+
+            stats.episode_lengths[i_episode] = t
+            stats.episode_rewards[i_episode] += reward
+
+            next_action_probs = policy(next_state)
+            next_action = np.random.choice(np.arange(len(action_probs)), p=next_action_probs)
 
             # step 2 : TD Update (with terminal handling)
+            Q[state][action] = (1 - alpha) * Q[state][action] + alpha * (reward + discount_factor * Q[next_state][next_action])
+
+            if done:
+                break
 
             # step 3 : Pick next action and move to next state-action pair
+            state = next_state
+            action = next_action
 
             #########################Implement your code end#########################
     return Q, stats

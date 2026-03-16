@@ -5,6 +5,7 @@ import torch.nn as nn
 from typing import *
 import sys
 import argparse
+import math
 
 parser = argparse.ArgumentParser(description='args')
 parser.add_argument('--num_episodes', type=int, help='number of episodes')
@@ -17,145 +18,138 @@ num_episodes = args.num_episodes
 checkpoint = args.checkpoint
 
 
+class BoardTransformer(nn.Module):
+    def __init__(self, board_size, d_model=128, nhead=4, num_layers=2, dim_feedforward=256, dropout=0.1):
+        super().__init__()
+        self.board_size = board_size
+        self.seq_len = board_size * board_size
+        
+        self.token_embedding = nn.Embedding(num_embeddings=3, embedding_dim=d_model)
+
+        self.pos_embedding = nn.Parameter(torch.randn(1, self.seq_len, d_model))
+        
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, 
+            nhead=nhead, 
+            dim_feedforward=dim_feedforward, 
+            dropout=dropout,
+            batch_first=True,
+            norm_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
+    def forward(self, x):
+        if x.dim() == 4:
+            x = x.squeeze(1)
+        
+        B, N, _ = x.shape
+        x_flat = x.view(B, -1) 
+        
+        tokens = self.token_embedding(x_flat) 
+        tokens = tokens + self.pos_embedding
+        
+        features = self.transformer_encoder(tokens) 
+        return features
+
+
 class Actor(nn.Module):
     """
-    The actor is responsible for generating dependable policies to maximize the cumulative reward as much as possible.
-    It takes a batch of arrays shaped either (B, 1, N, N) or (N, N) as input, and outputs a tensor shaped (B, N ** 2)
-    as the generated policy.
+    The actor uses a Transformer architecture to generate policies.
     """
 
     def __init__(self, board_size: int, lr=1e-4):
         super().__init__()
         self.board_size = board_size
-        """
-        # Define your NN structures here. Torch modules have to be registered during the initialization process.
-        # For example, you can define CNN structures as follows:
+        self.d_model = 128
+        
+        
+        self.backbone = BoardTransformer(
+            board_size=board_size, 
+            d_model=self.d_model,
+            nhead=4,
+            num_layers=3
+        )
+        
+        self.policy_head = nn.Sequential(
+            nn.Linear(self.d_model, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1)
+        )
 
-        # self.conv_blocks = nn.Sequential(
-        #     nn.Conv2d(in_channels=1, out_channels=channels, kernel_size=kernel_size, padding=padding),
-        #     nn.MaxPool2d(kernel_size=kernel_size, padding=padding, stride=stride),
-        #     nn.ReLU(),
-        # )
-
-        # Here, channels, kernel_size, padding, and stride are what we would call "Hyperparameters" in deep learning.
-
-        # After convolution, you can flatten (nn.Flatten()) the hidden 2d-representation to obtain the corresponding
-        # 1d-representation. Then, fully connected layers can be used to obtain a representation of n**2 dimensions,
-        # with each digit indicating the "raw number of policy" (which has to be further constrained and modified
-        # in the next step).
-
-        # self.linear_blocks = nn.Sequential(
-        #     nn.Linear(in_features=features, out_features=board_size ** 2),
-        # )
-
-        # After obtaining a representation of n**2 dimensions, you STILL NEED TO PERFORM ADDITIONAL PROCESSING,
-        # including:
-        # i) ensuring that all digits corresponding to illegal actions are set to 0 (!!!!!THE MOST IMPORTANT!!!!!);
-        # ii) ensuring that the remaining digits satisfy the normalization condition (i.e., the sum of them is equal
-        #     to 1).
-        # In-place operations are strongly discouraged because they can lead to gradient calculation failures.
-        # As an intelligent alternative, consider approaches that can avoid in-place modifications to achieve the goal.
-
-        # You are also encouraged to explore other powerful models and experiment with different techniques,
-        # such as using attention modules, different activation functions, or simply adjusting hyperparameter settings.
-        """
-
-        # BEGIN YOUR CODE
-        raise NotImplementedError("Not Implemented!")
-        # END YOUR CODE
-
-        # Define your optimizer here, which is responsible for calculating the gradients and performing optimizations.
-        # The learning rate (lr) is another hyperparameter that needs to be determined in advance.
         self.optimizer = torch.optim.Adam(params=self.parameters(), lr=lr)
 
     def forward(self, x: np.ndarray):
+      
         if len(x.shape) == 2:
-            output = torch.tensor(x).to(device).to(torch.float32).unsqueeze(0).unsqueeze(0)
+            x_tensor = torch.tensor(x).to(device).long().unsqueeze(0)
         else:
-            output = torch.tensor(x).to(device).to(torch.float32)
+            x_tensor = torch.tensor(x).to(device).long()
+            if x_tensor.dim() == 4:
+                x_tensor = x_tensor.squeeze(1) 
 
-        # Further process and transform the data here. Ensure that the output is shaped (B, n ** 2).
-        # We have already ensured that the shape of the raw input is unified to be (B, 1, N, N),
-        # where B >= 1 represents the number of data in this batch, and N = n is exactly the size of the board.
-
-        # You can continue processing the data here using the modules that were previously registered during the
-        # initialization process. For example:
-
-        # output = self.conv_blocks(output)
-        # output = nn.Flatten()(output)
-        # output = self.linear_blocks(output)
-
-        # And the reminder AGAIN:
-
-        # ****************************************
-        # After obtaining a representation of n**2 dimensions, you STILL NEED TO PERFORM ADDITIONAL DATA PROCESSING,
-        # including:
-        # i) ensuring that all digits corresponding to illegal actions are set to 0 (!!!!!THE MOST IMPORTANT!!!!!);
-        # ii) ensuring that the remaining digits satisfy the normalization condition (i.e., the sum of them is equal
-        #     to 1).
-        # In-place operations are strongly discouraged because they can lead to gradient calculation failures.
-        # ****************************************
-
-        # BEGIN YOUR CODE
-        raise NotImplementedError("Not Implemented!")
-        # END YOUR CODE
+        features = self.backbone(x_tensor)
+        
+        logits = self.policy_head(features).squeeze(-1)
+        
+        flat_inputs = x_tensor.view(logits.size(0), -1)
+        mask = (flat_inputs == 0) 
+        
+        masked_logits = torch.where(mask, logits, torch.tensor(-1e9).to(device))
+        
+        output = torch.softmax(masked_logits, dim=-1) 
+        
         return output
 
 
 class Critic(nn.Module):
     """
-    The critic is responsible for generating dependable Q-values to fit the solution of Bellman Equations. It takes
-    a batch of arrays (shaped either (B, 1, N, N) or (N, N)) and a batch of actions (shaped (B, 2)) as input, and
-    outputs a tensor shaped (B, ) as the Q-values on the specified (s, a) pairs.
-
-    For example, actions can be:
-    [[0, 1],
-     [2, 3],
-     [5, 6]]
-    which means that there are three actions leading the model to place the pieces on the coordinates (0, 1), (2, 3),
-    and (5, 6), respectively. These actions correspond one-to-one with indices 0 * 12 + 1 = 1, 2 * 12 + 3 = 27,
-    and 5 * 12 + 6 = 66, assuming n to be 12. You can easily transform a single action to the corresponding digit by
-    using _position_to_index, or using _index_to_position vice versa.
-
-    The main idea is that we first obtain a tensor shaped (B, N ** 2) as the Q-values for all possible actions given
-    the unified state tensor shaped (B, 1, N, N), and then extract the Q-values corresponding to each action (i, j)
-    from the entire Q-value tensor. (_position_to_index should be fully utilized to get the corresponding action indices).
-    Finally, it returns a tensor of shape (B,) containing these Q-values.
+    The critic uses a Transformer architecture to generate Q-values.
+    It predicts a Q-value for EVERY position on the board simultaneously, 
+    and then we select the ones corresponding to the actions taken.
     """
 
     def __init__(self, board_size: int, lr=1e-4):
         super().__init__()
         self.board_size = board_size
-        # Define your NN structures here as the same. Torch modules have to be registered during the initialization
-        # process.
+        
+        self.d_model = 128
 
-        # BEGIN YOUR CODE
-        raise NotImplementedError("Not Implemented!")
-        # END YOUR CODE
+        self.backbone = BoardTransformer(
+            board_size=board_size, 
+            d_model=self.d_model,
+            nhead=4,
+            num_layers=3
+        )
 
-        # Define your optimizer here, which is responsible for calculating the gradients and performing optimizations.
-        # The learning rate (lr) is another hyperparameter that needs to be determined in advance.
+        self.value_head = nn.Sequential(
+            nn.Linear(self.d_model, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1) 
+        )
+
         self.optimizer = torch.optim.Adam(params=self.parameters(), lr=lr)
 
     def forward(self, x: np.ndarray, action: np.ndarray):
-        indices = torch.tensor([_position_to_index(self.board_size, x, y) for x, y in action]).to(device)
+        indices = torch.tensor([_position_to_index(self.board_size, r, c) for r, c in action]).to(device)
+        
         if len(x.shape) == 2:
-            output = torch.tensor(x).to(device).to(torch.float32).unsqueeze(0).unsqueeze(0)
+            x_tensor = torch.tensor(x).to(device).long().unsqueeze(0)
         else:
-            output = torch.tensor(x).to(device).to(torch.float32)
+            x_tensor = torch.tensor(x).to(device).long()
+            if x_tensor.dim() == 4:
+                x_tensor = x_tensor.squeeze(1)
 
-        # BEGIN YOUR CODE
-        raise NotImplementedError("Not Implemented!")
-        # END YOUR CODE
+        features = self.backbone(x_tensor)
+        
+        all_qs = self.value_head(features).squeeze(-1)
+        output = all_qs[torch.arange(len(indices)), indices]
 
         return output
 
 
 class GobangModel(nn.Module):
     """
-    The GobangModel class integrates the Actor and Critic classes for computation and training. Given state tensors "x"
-    and action tensors "action", it directly outputs self.actor(x) and self.critic(x, action) as the policy and Q-values
-    respectively.
+    The GobangModel class integrates the Actor and Critic classes.
     """
 
     def __init__(self, board_size: int, bound: int):
@@ -163,47 +157,44 @@ class GobangModel(nn.Module):
         self.bound = bound
         self.board_size = board_size
 
-        """
-        Register the actor and critic modules here. You do not need to further design the structures at this step.
-        Feel free to add extra parameters in the __init__ method of either the Actor class or the Critic class for your 
-        convenience, if necessary.
-        """
-
-        # BEGIN YOUR CODE
-        # self.actor = Actor(board_size=board_size, ...)
-        # self.critic = Critic(board_size=board_size, ...)
-        raise NotImplementedError("Not Implemented!")
-        # END YOUR CODE
-
+        self.actor = Actor(board_size=board_size)
+        self.critic = Critic(board_size=board_size)
+        
         self.to(device)
 
     def forward(self, x, action):
         """
-        Return the policy vector π(s) and Q-values Q(s, a) given state "x" and action "action".
+        Return the policy vector π(s) and Q-values Q(s, a).
         """
         return self.actor(x), self.critic(x, action)
 
-    def optimize(self, policy, qs, actions, rewards, next_qs, gamma, eps=1e-6):
+    def optimize(self, policy, qs, actions, rewards, next_qs, gamma, entropy_coef=0.05):
         """
-        This function calculates the loss for both the actor and critic.
-        Using the obtained loss, we can apply optimization algorithms through actor.optimizer and critic.optimizer
-        to either maximize the actor's actual objective or minimize the critic's loss.
-
-        There are 3 bugs in the function "optimize" that prevent the model from executing optimizations correctly.
-        Identify and debug all errors.
+        :param entropy_coef: Entropy regularization coefficient
         """
-
-        targets = rewards + gamma * next_qs
+        eps = 1e-10
+        
+        targets = rewards + gamma * next_qs.detach()
         critic_loss = nn.MSELoss()(targets, qs)
+
         indices = torch.tensor([_position_to_index(self.board_size, x, y) for x, y in actions]).to(device)
         aimed_policy = policy[torch.arange(len(indices)), indices]
-        actor_loss = -torch.mean(torch.log(aimed_policy + eps) * qs.clone().detach())
+        
+        base_actor_loss = -torch.mean(torch.log(aimed_policy + eps) * qs.clone().detach())
+        
+        dist_entropy = -torch.sum(policy * torch.log(policy + eps), dim=1).mean()
+        actor_loss = base_actor_loss - (entropy_coef * dist_entropy)
 
         self.actor.optimizer.zero_grad()
         actor_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0) 
+        self.actor.optimizer.step()
 
         self.critic.optimizer.zero_grad()
         critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
+        self.critic.optimizer.step()
+        
         return actor_loss, critic_loss
 
 
@@ -219,6 +210,7 @@ if __name__ == "__main__":
                     "checkpoint": checkpoint,
                     "board_size": 12,
                     "bound": 5,
+                    "model_type": "Transformer"
                 }
             )
             print("Wandb initialized successfully.")
@@ -227,6 +219,7 @@ if __name__ == "__main__":
             print("Continuing without wandb...")
     
     agent = GobangModel(board_size=12, bound=5).to(device)
+    
     train_model(agent, num_episodes=num_episodes, checkpoint=checkpoint)
     
     if args.use_wandb:

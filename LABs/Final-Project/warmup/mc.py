@@ -69,12 +69,35 @@ def mc_first_visit(env, num_episodes, discount_factor=1.0, epsilon=0.1):
             sys.stdout.flush()
 
         #########################Implement your code here#########################
-        raise NotImplementedError("Not implemented")
+        # raise NotImplementedError("Not implemented")
         # Step 1: Generate an episode: an array of (state, action, reward) tuples
+        episode = []
+        state = env.reset()
+
+        while True:
+            probs = policy(state)
+            action = np.random.choice(np.arange(len(probs)), p=probs)
+            next_state, reward, done, _ = env.step(action)
+            episode.append((state, action, reward))
+            
+            if done:
+                break
+
+            state = next_state
 
         # Step 2: Find first-visit index for each (state, action) pair
+        pair_in_episode = set([(x[0], x[1]) for x in episode])
 
         # Step 3: Calculate returns backward, update only at first-visit time step
+        for state, action in pair_in_episode:
+            pair = (state, action)
+            index = next(i for i, x in enumerate(episode) if x[0] == state and x[1] == action)
+            expected_reward = sum([x[2] * discount_factor ** i for i, x in enumerate(episode[index:])])
+
+            returns_sum[pair] += expected_reward
+            returns_count[pair] += 1
+            Q[state][action] = returns_sum[pair] / returns_count[pair]
+
         #########################Implement your code end#########################
     return Q, policy
 
@@ -96,10 +119,31 @@ def mc_every_visit(env, num_episodes, discount_factor=1.0, epsilon=0.1):
             sys.stdout.flush()
 
         #########################Implement your code here#########################
-        raise NotImplementedError("Not implemented")
+        # raise NotImplementedError("Not implemented")
         # Step 1: Generate an episode
+        episode = []
+        state = env.reset()
+
+        while True:
+            probs = policy(state)
+            action = np.random.choice(np.arange(len(probs)), p=probs)
+            next_state, reward, done, _ = env.step(action)
+            episode.append((state, action, reward))
+            
+            if done:
+                break
+
+            state = next_state
         
         # Step 2: Calculate returns for each (state, action) pair (every-visit)
+        reward_back = 0
+        for state, action, reward in reversed(episode):
+            pair = (state, action)
+            reward_back = reward_back * discount_factor + reward
+
+            returns_sum[pair] += reward_back
+            returns_count[pair] += 1
+            Q[state][action] = returns_sum[pair] / returns_count[pair]
         
         #########################Implement your code end#########################
 
@@ -115,9 +159,9 @@ if __name__ == "__main__":
         file_name="First_Visit_Value_Function_Episodes_10000")
     
     # Every-Visit Monte Carlo
-    # Q, policy = mc_every_visit(env, num_episodes=10000, epsilon=0.1)
-    # V = defaultdict(float)
-    # for state, actions in Q.items():
-    #     V[state] = np.max(actions)
-    # plotting.plot_value_function(V, title="Optimal Value Function", 
-    #     file_name="Every_Visit_Value_Function_Episodes_10000")
+    Q, policy = mc_every_visit(env, num_episodes=10000, epsilon=0.1)
+    V = defaultdict(float)
+    for state, actions in Q.items():
+        V[state] = np.max(actions)
+    plotting.plot_value_function(V, title="Optimal Value Function", 
+        file_name="Every_Visit_Value_Function_Episodes_10000")

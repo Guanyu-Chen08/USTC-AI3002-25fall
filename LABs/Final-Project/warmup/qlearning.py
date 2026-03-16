@@ -101,12 +101,25 @@ def q_learning(env, num_episodes, discount_factor=1.0, alpha=0.5, epsilon=0.1, m
         # One step in the environment (with max_steps safety limit)
         for t in range(max_steps):
             #########################Implement your code here#########################
-            raise NotImplementedError("Not implemented")
+            # raise NotImplementedError("Not implemented")
             # step 1 : Take a step
+            action_probs = policy(state)
+            action = np.random.choice(np.arange(len(action_probs)), p=action_probs)
+
+            next_state, reward, done, _ = env.step(action)
+
+            stats.episode_lengths[i_episode] = t
+            stats.episode_rewards[i_episode] += reward
 
             # step 2 : TD Update (with terminal handling)
+            best_action = np.argmax(Q[next_state])
+            Q[state][action] = (1 - alpha) * Q[state][action] + alpha * (reward + discount_factor * Q[next_state][best_action])
+
+            if done:
+                break
 
             # step 3 : Move to next state and handle episode end
+            state = next_state
 
             #########################Implement your code end#########################
     return Q, stats
@@ -131,12 +144,30 @@ def double_q_learning(env, num_episodes, discount_factor=1.0, alpha=0.5, epsilon
 
         for t in range(max_steps):
             #########################Implement your code here#########################       
-            raise NotImplementedError("Not implemented")
+            # raise NotImplementedError("Not implemented")
             # step 1 : Take a step using combined Q1+Q2 policy
+            action_probs = policy(state)
+            action = np.random.choice(np.arange(len(action_probs)), p=action_probs)
+
+            next_state, reward, done, _ = env.step(action)
+
+            stats.episode_lengths[i_episode] = t
+            stats.episode_rewards[i_episode] += reward
 
             # step 2 : Double Q-learning update
+            if np.random.rand() < 0.5:
+                best_action = np.argmax(Q1[next_state])
+                Q1[state][action] = (1 - alpha) * Q1[state][action] + alpha * (reward + discount_factor * Q2[next_state][best_action])
+            else:
+                best_action = np.argmax(Q2[next_state])
+                Q2[state][action] = (1 - alpha) * Q2[state][action] + alpha * (reward + discount_factor * Q1[next_state][best_action])
+            
+            if done:
+                break
 
             # step 3 : Move to next state and handle episode end
+            state = next_state
+
             #########################Implement your code end#########################
                 
     return Q1, Q2, stats
@@ -148,5 +179,5 @@ if __name__ == '__main__':
     plotting.plot_episode_stats(stats, file_name='episode_stats_q_learning')
     
     # Double Q-Learning
-    # Q1, Q2, stats = double_q_learning(env, 1000)
-    # plotting.plot_episode_stats(stats, file_name='episode_stats_double_q_learning')
+    Q1, Q2, stats = double_q_learning(env, 1000)
+    plotting.plot_episode_stats(stats, file_name='episode_stats_double_q_learning')
