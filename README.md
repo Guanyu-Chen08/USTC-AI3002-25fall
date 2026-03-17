@@ -1,5 +1,15 @@
 # USTC-AI3002-25fall
 
+This repository contains my lab assignments for the AI3002 course USTC.  
+My lab submissions are available in the `LABs` folder.  
+Please note that this repository does **not** include my homework submissions; therefore, the `HWs` folder remains the same as in the original course repository.
+
+本仓库包含我在中国科学技术大学（USTC）AI3002 课程中的实验作业。  
+我的实验提交内容位于 `LABs` 文件夹中。  
+请注意，本仓库**不**包含我的书面作业提交，因此 `HWs` 文件夹与课程原始仓库保持一致。
+
+---------
+
 欢迎同学们修读**人工智能与机器学习基础**课程，这里是课程仓库，包含所有实验资料和书面作业。
 
 
